@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Country Picker Wheel</title>
+  <style>
+    /* Basic Reset */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: sans-serif;
+      background: #f2f2f2;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Layout: Wheel on left, controls on right */
+    .main-container {
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: center;
+      margin: 20px;
+      gap: 20px;
+    }
+
+    /* Wheel Container */
+    .wheel-container {
+      position: relative;
+      width: 500px;
+      height: 500px;
+      margin: 0 auto;
+    }
+    /* The canvas is the actual wheel. */
+    #wheelCanvas {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      display: block;
+      background: #fafafa;
+      border: 2px solid #ddd;
+    }
+
+    /* Spin button (center of wheel) with upward arrow */
+    .spin-button {
+      position: absolute;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #000;
+      color: #fff;
+      font-size: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      z-index: 2;
+    }
+    .spin-button:hover {
+      background: #222;
+    }
+
+    /* We rotate the entire .wheel-rotator container for spinning. */
+    .wheel-rotator {
+      transition: transform 4s cubic-bezier(0.33, 1, 0.68, 1);
+    }
+
+    /* Region / Input Panel */
+    .input-panel {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      padding: 15px;
+      width: 250px;
+      min-width: 220px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .input-panel h2 {
+      font-size: 18px;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .regions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .regions button {
+      flex: 1;
+      min-width: 90px;
+      padding: 8px;
+      background: #f0f0f0;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .regions button.selected {
+      background: #95BDFF;
+      color: #fff;
+    }
+
+    /* Popup (Modal) */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-content {
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+      position: relative;
+    }
+    .modal-content img {
+      max-width: 200px;
+      margin-bottom: 15px;
+    }
+    .modal-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+    .modal-buttons button {
+      flex: 1;
+      min-width: 90px;
+      padding: 10px;
+      border: none;
+      border-radius: 4px;
+      background: #ddd;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .modal-buttons button:hover {
+      background: #ccc;
+    }
+
+    /* Utility classes */
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="main-container">
+  <!-- Wheel Area -->
+  <div class="wheel-container">
+    <!-- The element we rotate when spinning -->
+    <div class="wheel-rotator">
+      <canvas id="wheelCanvas" width="500" height="500"></canvas>
+    </div>
+    <!-- Spin button with upward arrow -->
+    <div class="spin-button" id="spinBtn">&#8593;</div>
+  </div>
+
+  <!-- Input / Region Panel -->
+  <div class="input-panel">
+    <h2>Continents</h2>
+    <div class="regions">
+      <button data-region="africa" class="selected">Africa</button>
+      <button data-region="asia" class="selected">Asia</button>
+      <button data-region="europe" class="selected">Europe</button>
+      <button data-region="northamerica" class="selected">North America</button>
+      <button data-region="southamerica" class="selected">South America</button>
+      <button data-region="oceania" class="selected">Oceania</button>
+    </div>
+  </div>
+</div>
+
+<!-- Popup (Modal) -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-content">
+    <img src="" alt="Selected Flag" id="modalFlag">
+    <div style="margin-bottom:15px;" id="modalStatus">Selected</div>
+    <div class="modal-buttons">
+      <button id="btnCountry">Country</button>
+      <button id="btnCapital">Capital</button>
+      <button id="btnRemove">Remove</button>
+      <button id="btnKeep">Keep</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* -------------------------------------------------------
+   Data Arrays
+---------------------------------------------------------*/
+const africaCo = ["Algeria","Angola","Benin","Botswana","Burkina Faso","Burundi","Cameroon","Cape Verde","Central African Republic","Chad","Comoros","DR Congo","Djibouti","Egypt","Equatorial Guinea","Eritrea","Eswatini","Ethiopia","Gabon","Gambia","Ghana","Guinea","Guinea-Bissau","Ivory Coast","Kenya","Lesotho","Liberia","Libya","Madagascar","Malawi","Mali","Mauritania","Mauritius","Morocco","Mozambique","Namibia","Niger","Nigeria","Republic of the Congo","Rwanda","São Tomé and Príncipe","Senegal","Seychelles","Sierra Leone","Somalia","South Africa","South Sudan","Sudan","Tanzania","Togo","Tunisia","Uganda","Zambia","Zimbabwe"];
+const africaCa = ["Algiers","Luanda","Porto Novo","Gaborone","Ouagadougou","Gitega","Yaoundé","Praia","Bangui","N'Djamena","Moroni","Kinshasa","Djibouti","Cairo","Malabo","Asmara","Mbabane","Addis Ababa","Libreville","Banjul","Accra","Conakry","Bissau","Yamoussoukro","Nairobi","Maseru","Monrovia","Tripoli","Antananarivo","Lilongwe","Bamako","Nouakchott","Port Louis","Rabat","Maputo","Windhoek","Niamey","Abuja","Brazzaville","Kigali","São Tomé","Dakar","Victoria","Freetown","Mogadishu","Pretoria","Juba","Khartoum","Dodoma","Lomé","Tunis","Kampala","Lusaka","Harare"];
+
+const asiaCo = ["Afghanistan","Armenia","Azerbaijan","Bahrain","Bangladesh","Bhutan","Brunei","Cambodia","China","Georgia","India","Indonesia","Iran","Iraq","Israel","Japan","Jordan","Kazakhstan","North Korea","South Korea","Kuwait","Kyrgyzstan","Laos","Lebanon","Malaysia","Maldives","Mongolia","Myanmar","Nepal","Oman","Pakistan","Palestine","Philippines","Qatar","Saudi Arabia","Singapore","Sri Lanka","Syria","Taiwan","Tajikistan","Thailand","Turkey","Turkmenistan","United Arab Emirates","Uzbekistan","Vietnam","Yemen"];
+const asiaCa = ["Kabul","Yerevan","Baku","Manama","Dhaka","Thimphu","Bandar Seri Begawan","Phnom Penh","Beijing","Tbilisi","New Delhi","Jakarta","Tehran","Baghdad","Jerusalem","Tokyo","Amman","Astana","Pyongyang","Seoul","Kuwait City","Bishkek","Vientiane","Beirut","Kuala Lumpur","Malé","Ulaanbaatar","Naypyidaw","Kathmandu","Muscat","Islamabad","East Jerusalem","Manila","Doha","Riyadh","Singapore","Sri Jayawardenapura Kotte","Damascus","Taipei","Dushanbe","Bangkok","Ankara","Ashgabat","Abu Dhabi","Tashkent","Hanoi","Sana'a"];
+
+const europeCo = ["Albania","Andorra","Austria","Belarus","Belgium","Bosnia and Herzegovina","Bulgaria","Croatia","Cyprus","Czech Republic","Denmark","Estonia","Finland","France","Germany","Greece","Hungary","Iceland","Ireland","Italy","Kosovo","Latvia","Liechtenstein","Lithuania","Luxembourg","Malta","Moldova","Monaco","Montenegro","Netherlands","North Macedonia","Norway","Poland","Portugal","Romania","Russia","San Marino","Serbia","Slovakia","Slovenia","Spain","Sweden","Switzerland","Ukraine","United Kingdom","Vatican City"];
+const europeCa = ["Tirana","Andorra la Vella","Vienna","Minsk","Brussels","Sarajevo","Sofia","Zagreb","Nicosia","Prague","Copenhagen","Tallinn","Helsinki","Paris","Berlin","Athens","Budapest","Reykjavík","Dublin","Rome","Pristina","Riga","Vaduz","Vilnius","Luxembourg","Valletta","Chișinău","Monaco","Podgorica","Amsterdam","Skopje","Oslo","Warsaw","Lisbon","Bucharest","Moscow","San Marino","Belgrade","Bratislava","Ljubljana","Madrid","Stockholm","Bern","Kyiv","London","Vatican City"];
+
+const nAmericaCo = ["Antigua and Barbuda","Bahamas","Barbados","Belize","Canada","Costa Rica","Cuba","Dominica","Dominican Republic","El Salvador","Grenada","Guatemala","Haiti","Honduras","Jamaica","Mexico","Nicaragua","Panama","Saint Kitts and Nevis","Saint Lucia","Saint Vincent & Grenadines","Trinidad and Tobago","United States"];
+const nAmericaCa = ["St. John's","Nassau","Bridgetown","Belmopan","Ottawa","San José","Havana","Roseau","Santo Domingo","San Salvador","St. George's","Guatemala City","Port-au-Prince","Tegucigalpa","Kingston","Mexico City","Managua","Panama City","Basseterre","Castries","Kingstown","Port of Spain","Washington D.C."];
+
+const sAmericaCo = ["Argentina","Bolivia","Brazil","Chile","Colombia","Ecuador","Guyana","Paraguay","Peru","Suriname","Uruguay","Venezuela"];
+const sAmericaCa = ["Buenos Aires","Sucre","Brasilia","Santiago","Bogota","Quito","Georgetown","Asunción","Lima","Paramaribo","Montevideo","Caracas"];
+
+const oceaniaCo = ["Australia","East Timor","Fiji","Kiribati","Marshall Islands","Micronesia","Nauru","New Zealand","Palau","Papua New Guinea","Samoa","Solomon Islands","Tonga","Tuvalu","Vanuatu"];
+const oceaniaCa = ["Canberra","Dili","Suva","Tarawa","Majuro","Palikir","Yaren","Wellington","Melekeok","Port Moresby","Apia","Honiara","Nuku'alofa","Funafuti","Port Vila"];
+
+/* -------------------------------------------------------
+   Flag Mapping via FlagCDN Codes
+---------------------------------------------------------*/
+let flagMapping = {};
+fetch('https://flagcdn.com/en/codes.json')
+  .then(res => res.json())
+  .then(data => {
+    for (let code in data) {
+      let lowerName = data[code].toLowerCase();
+      flagMapping[lowerName] = code;
+    }
+  })
+  .catch(err => console.error("Failed to load codes.json:", err));
+
+/* -------------------------------------------------------
+   Variables for the Wheel
+---------------------------------------------------------*/
+let wheelCountries = [];
+let wheelCapitals = [];
+let currentRotation = 0;
+let spinning = false;
+let chosenIndex = -1;
+
+/* -------------------------------------------------------
+   Canvas & Rotation References
+---------------------------------------------------------*/
+const wheelCanvas = document.getElementById('wheelCanvas');
+const ctx = wheelCanvas.getContext('2d');
+const wheelRotator = document.querySelector('.wheel-rotator');
+const spinBtn = document.getElementById('spinBtn');
+
+/* -------------------------------------------------------
+   Modal References
+---------------------------------------------------------*/
+const modalOverlay = document.getElementById('modalOverlay');
+const modalFlag = document.getElementById('modalFlag');
+const modalStatus = document.getElementById('modalStatus');
+const btnCountry = document.getElementById('btnCountry');
+const btnCapital = document.getElementById('btnCapital');
+const btnRemove = document.getElementById('btnRemove');
+const btnKeep = document.getElementById('btnKeep');
+
+/* -------------------------------------------------------
+   Region Panel (Dynamic Selection)
+---------------------------------------------------------*/
+const regionButtons = document.querySelectorAll('.regions button');
+// Initialize: all regions selected by default.
+regionButtons.forEach(btn => {
+  btn.classList.add('selected');
+  btn.addEventListener('click', () => {
+    btn.classList.toggle('selected');
+    updateWheelFromRegions();
+    drawWheel();
+  });
+});
+
+/* -------------------------------------------------------
+   Build Wheel Data from Selected Regions
+---------------------------------------------------------*/
+function updateWheelFromRegions() {
+  let co = [], ca = [];
+  // For each region button that is selected, add its countries.
+  regionButtons.forEach(btn => {
+    if (btn.classList.contains('selected')) {
+      let region = btn.dataset.region;
+      if (region === 'africa') {
+        co = co.concat(africaCo);
+        ca = ca.concat(africaCa);
+      } else if (region === 'asia') {
+        co = co.concat(asiaCo);
+        ca = ca.concat(asiaCa);
+      } else if (region === 'europe') {
+        co = co.concat(europeCo);
+        ca = ca.concat(europeCa);
+      } else if (region === 'northamerica') {
+        co = co.concat(nAmericaCo);
+        ca = ca.concat(nAmericaCa);
+      } else if (region === 'southamerica') {
+        co = co.concat(sAmericaCo);
+        ca = ca.concat(sAmericaCa);
+      } else if (region === 'oceania') {
+        co = co.concat(oceaniaCo);
+        ca = ca.concat(oceaniaCa);
+      }
+    }
+  });
+  wheelCountries = co.slice();
+  wheelCapitals = ca.slice();
+  currentRotation = 0;
+  wheelRotator.style.transform = 'rotate(0deg)';
+}
+
+/* Initially build the wheel from all regions */
+updateWheelFromRegions();
+
+/* -------------------------------------------------------
+   Draw the Wheel with Alternating Colors & Adjusted Flag Position
+---------------------------------------------------------*/
+function drawWheel() {
+  ctx.clearRect(0, 0, wheelCanvas.width, wheelCanvas.height);
+
+  let numSlices = wheelCountries.length;
+  if (numSlices === 0) {
+    ctx.font = "24px sans-serif";
+    ctx.fillStyle = "#666";
+    ctx.textAlign = "center";
+    ctx.fillText("No countries selected", wheelCanvas.width / 2, wheelCanvas.height / 2);
+    return;
+  }
+
+  let centerX = wheelCanvas.width / 2;
+  let centerY = wheelCanvas.height / 2;
+  let radius = Math.min(centerX, centerY) - 10;
+  let sliceAngle = (2 * Math.PI) / numSlices;
+  // Four alternating, non-neon (dull) colors: dark green, light green, orange, and skin tone.
+  const sliceColors = ["#556B2F", "#8FBC8F", "#CD853F", "#F5DEB3"];
+
+  for (let i = 0; i < numSlices; i++) {
+    let startAngle = i * sliceAngle - Math.PI / 2;
+    let endAngle = startAngle + sliceAngle;
+
+    // Draw slice background with alternating colors.
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+    ctx.closePath();
+    ctx.fillStyle = sliceColors[i % 4];
+    ctx.fill();
+    ctx.strokeStyle = "#fff";
+    ctx.stroke();
+
+    // Calculate mid-angle for flag placement.
+    let midAngle = startAngle + sliceAngle / 2;
+    // Increase the multiplier from 0.75 to 0.85 to move flags closer to the wheel edge.
+    let flagX = centerX + Math.cos(midAngle) * radius * 0.85;
+    let flagY = centerY + Math.sin(midAngle) * radius * 0.85;
+    // Draw the flag (smaller size so they do not overlap)
+    drawFlag(wheelCountries[i], flagX, flagY, midAngle);
+  }
+}
+
+// Draw a flag with fixed dimensions (smaller so they fit within the slice)
+function drawFlag(countryName, x, y, angle) {
+  const flagW = 30;
+  const flagH = 22;
+  let code = flagMapping[countryName.toLowerCase()];
+  if (!code) return;
+  let img = new Image();
+  img.crossOrigin = "anonymous";
+  img.src = `https://flagcdn.com/48x36/${code}.png`;
+  img.onload = () => {
+    ctx.save();
+    ctx.translate(x, y);
+    // Rotate in the opposite direction so the flag appears upright.
+    ctx.rotate(angle + Math.PI / 2);
+    ctx.drawImage(img, -flagW / 2, -flagH / 2, flagW, flagH);
+    ctx.restore();
+  };
+}
+
+/* -------------------------------------------------------
+   Spin the Wheel (Aligning the Chosen Slice at the Top)
+---------------------------------------------------------*/
+spinBtn.addEventListener('click', spinWheel);
+function spinWheel() {
+  if (spinning) return;
+  if (wheelCountries.length === 0) {
+    alert("No countries to spin.");
+    return;
+  }
+  spinning = true;
+  let numSlices = wheelCountries.length;
+  let sliceAngleDeg = 360 / numSlices;
+  // Choose a random slice.
+  chosenIndex = Math.floor(Math.random() * numSlices);
+  // Compute desired rotation so that the chosen slice's center (at (i+0.5)*sliceAngle) aligns with the top (-90°).
+  // Since slices are drawn with a -90° offset, desired rotation = - (chosenIndex + 0.5) * sliceAngleDeg.
+  let desiredRotation = - (chosenIndex + 0.5) * sliceAngleDeg;
+  let extraSpins = 3 + Math.floor(Math.random() * 3); // between 3 and 5 extra spins
+  let targetRotation = currentRotation + extraSpins * 360 + (desiredRotation - (currentRotation % 360));
+  wheelRotator.style.transition = "transform 4s cubic-bezier(0.33, 1, 0.68, 1)";
+  wheelRotator.style.transform = `rotate(${targetRotation}deg)`;
+  wheelRotator.addEventListener("transitionend", function handler() {
+    wheelRotator.removeEventListener("transitionend", handler);
+    currentRotation = targetRotation;
+    spinning = false;
+    showPopup(chosenIndex);
+  });
+}
+
+/* -------------------------------------------------------
+   Popup (Modal) Logic
+---------------------------------------------------------*/
+function showPopup(index) {
+  if (index < 0 || index >= wheelCountries.length) return;
+  let country = wheelCountries[index];
+  let code = flagMapping[country.toLowerCase()];
+  if (code) {
+    modalFlag.src = `https://flagcdn.com/160x120/${code}.png`;
+  } else {
+    modalFlag.src = "";
+  }
+  btnCountry.textContent = "Country";
+  btnCapital.textContent = "Capital";
+  btnRemove.textContent = "Remove";
+  btnKeep.textContent = "Keep";
+  modalStatus.textContent = "Selected";
+  modalOverlay.classList.add('active');
+
+  btnCountry.onclick = () => {
+    btnCountry.textContent = wheelCountries[index];
+  };
+  btnCapital.onclick = () => {
+    btnCapital.textContent = wheelCapitals[index];
+  };
+  btnRemove.onclick = () => {
+    closeModal();
+    wheelCountries.splice(index, 1);
+    wheelCapitals.splice(index, 1);
+    drawWheel();
+  };
+  btnKeep.onclick = () => {
+    closeModal();
+  };
+}
+
+function closeModal() {
+  modalOverlay.classList.remove('active');
+}
+</script>
+
+</body>
+</html>

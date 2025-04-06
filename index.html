@@ -71,7 +71,7 @@
 
     /* We rotate the entire .wheel-rotator container for spinning. */
     .wheel-rotator {
-      transition: transform 4s cubic-bezier(0.33, 1, 0.68, 1);
+      transition: transform 1s cubic-bezier(0.33, 1, 0.68, 1);
     }
 
     /* Region / Input Panel */
@@ -274,9 +274,8 @@ const btnKeep = document.getElementById('btnKeep');
    Region Panel (Dynamic Selection)
 ---------------------------------------------------------*/
 const regionButtons = document.querySelectorAll('.regions button');
-// Initialize: all regions selected by default.
+// All buttons are toggles; update the wheel whenever one is clicked.
 regionButtons.forEach(btn => {
-  btn.classList.add('selected');
   btn.addEventListener('click', () => {
     btn.classList.toggle('selected');
     updateWheelFromRegions();
@@ -289,7 +288,6 @@ regionButtons.forEach(btn => {
 ---------------------------------------------------------*/
 function updateWheelFromRegions() {
   let co = [], ca = [];
-  // For each region button that is selected, add its countries.
   regionButtons.forEach(btn => {
     if (btn.classList.contains('selected')) {
       let region = btn.dataset.region;
@@ -324,6 +322,28 @@ function updateWheelFromRegions() {
 updateWheelFromRegions();
 
 /* -------------------------------------------------------
+   Helper: Compute Flag Dimensions Based on Total Flags
+---------------------------------------------------------*/
+function getFlagProperties(total) {
+  const baseW = 30;
+  const baseH = 22;
+  let factor = 1;
+  let extraRotation = 0;
+  if(total <= 40) {
+    factor = 1;
+  } else if(total <= 60) {
+    // Interpolate from 1 at 40 to 0.8 at 60.
+    factor = 1 - 0.2 * ((total - 40) / 20);
+  } else {
+    // For totals above 60, further shrink (min factor 0.5) and turn flag sideways.
+    factor = 0.8 - 0.2 * ((total - 60) / 40);
+    if(factor < 0.5) factor = 0.5;
+    extraRotation = Math.PI/2;
+  }
+  return { w: baseW * factor, h: baseH * factor, extraRotation: extraRotation };
+}
+
+/* -------------------------------------------------------
    Draw the Wheel with Alternating Colors & Adjusted Flag Position
 ---------------------------------------------------------*/
 function drawWheel() {
@@ -342,14 +362,13 @@ function drawWheel() {
   let centerY = wheelCanvas.height / 2;
   let radius = Math.min(centerX, centerY) - 10;
   let sliceAngle = (2 * Math.PI) / numSlices;
-  // Four alternating, non-neon (dull) colors: dark green, light green, orange, and skin tone.
+  // Four alternating dull colors.
   const sliceColors = ["#556B2F", "#8FBC8F", "#CD853F", "#F5DEB3"];
 
   for (let i = 0; i < numSlices; i++) {
     let startAngle = i * sliceAngle - Math.PI / 2;
     let endAngle = startAngle + sliceAngle;
 
-    // Draw slice background with alternating colors.
     ctx.beginPath();
     ctx.moveTo(centerX, centerY);
     ctx.arc(centerX, centerY, radius, startAngle, endAngle);
@@ -359,20 +378,20 @@ function drawWheel() {
     ctx.strokeStyle = "#fff";
     ctx.stroke();
 
-    // Calculate mid-angle for flag placement.
     let midAngle = startAngle + sliceAngle / 2;
-    // Increase the multiplier from 0.75 to 0.85 to move flags closer to the wheel edge.
+    // Move flags closer to the wheel edge.
     let flagX = centerX + Math.cos(midAngle) * radius * 0.85;
     let flagY = centerY + Math.sin(midAngle) * radius * 0.85;
-    // Draw the flag (smaller size so they do not overlap)
     drawFlag(wheelCountries[i], flagX, flagY, midAngle);
   }
 }
 
-// Draw a flag with fixed dimensions (smaller so they fit within the slice)
+/* -------------------------------------------------------
+   Draw a Flag with Size/Rotation Based on Total Flags
+---------------------------------------------------------*/
 function drawFlag(countryName, x, y, angle) {
-  const flagW = 30;
-  const flagH = 22;
+  let total = wheelCountries.length;
+  let { w: flagW, h: flagH, extraRotation } = getFlagProperties(total);
   let code = flagMapping[countryName.toLowerCase()];
   if (!code) return;
   let img = new Image();
@@ -381,15 +400,15 @@ function drawFlag(countryName, x, y, angle) {
   img.onload = () => {
     ctx.save();
     ctx.translate(x, y);
-    // Rotate in the opposite direction so the flag appears upright.
-    ctx.rotate(angle + Math.PI / 2);
-    ctx.drawImage(img, -flagW / 2, -flagH / 2, flagW, flagH);
+    // Rotate to keep flag upright, plus extra if needed.
+    ctx.rotate(angle + Math.PI/2 + extraRotation);
+    ctx.drawImage(img, -flagW/2, -flagH/2, flagW, flagH);
     ctx.restore();
   };
 }
 
 /* -------------------------------------------------------
-   Spin the Wheel (Aligning the Chosen Slice at the Top)
+   Spin the Wheel (Chosen Slice Aligns at Top)
 ---------------------------------------------------------*/
 spinBtn.addEventListener('click', spinWheel);
 function spinWheel() {
@@ -401,14 +420,12 @@ function spinWheel() {
   spinning = true;
   let numSlices = wheelCountries.length;
   let sliceAngleDeg = 360 / numSlices;
-  // Choose a random slice.
   chosenIndex = Math.floor(Math.random() * numSlices);
-  // Compute desired rotation so that the chosen slice's center (at (i+0.5)*sliceAngle) aligns with the top (-90°).
-  // Since slices are drawn with a -90° offset, desired rotation = - (chosenIndex + 0.5) * sliceAngleDeg.
+  // Desired rotation so that chosen slice's center lands exactly at top.
   let desiredRotation = - (chosenIndex + 0.5) * sliceAngleDeg;
-  let extraSpins = 3 + Math.floor(Math.random() * 3); // between 3 and 5 extra spins
+  let extraSpins = 3 + Math.floor(Math.random() * 3); // 3 to 5 extra spins
   let targetRotation = currentRotation + extraSpins * 360 + (desiredRotation - (currentRotation % 360));
-  wheelRotator.style.transition = "transform 4s cubic-bezier(0.33, 1, 0.68, 1)";
+  wheelRotator.style.transition = "transform 1s cubic-bezier(0.33, 1, 0.68, 1)";
   wheelRotator.style.transform = `rotate(${targetRotation}deg)`;
   wheelRotator.addEventListener("transitionend", function handler() {
     wheelRotator.removeEventListener("transitionend", handler);

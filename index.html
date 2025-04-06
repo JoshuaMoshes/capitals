@@ -458,6 +458,9 @@ function drawFlag(countryName, x, y, angle) {
   let { w: flagW, h: flagH, extraRotation } = getFlagProperties(total);
   let code = flagMapping[countryName.toLowerCase()];
   if (!code) return;
+  if (code === "us-ga") {
+    code = "ge";
+  }
   let img = new Image();
   img.crossOrigin = "anonymous";
   img.src = `https://flagcdn.com/48x36/${code}.png`;
